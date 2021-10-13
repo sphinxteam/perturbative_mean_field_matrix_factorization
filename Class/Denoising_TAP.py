@@ -2,25 +2,6 @@ import numpy as np
 import pickle
 from scipy import linalg
 
-"""
-This finds the solution to the "denoising TAP" equations, in which we did not introduce any constraint on the field X to begin with.
-This assumes a Gaussian channel with variance Delta.
-I use rescaled variables (e.g. Y' = Y /sqrt(Delta)) for Delta > 1, which give better numerical precision and stability for large Delta.
-
-
-FIXME: Can I implement other spectra, e.g. uniformly distributed, symmetric orthogonal matrix etc... ? 
-What changes in the TAP equations?
-"""
-
-#At moderately large alpha (i.e. for instance alpha = 2), the MSE seems to improve quite nicely for Wishart denoising 
-
-def check_diagonal_removal(M, g):
-    #The scaling is such that the spectrum is the one of g/sqrt(M)
-    #trace = np.trace(g/np.sqrt(M))/M
-    #assert np.abs(trace) < 1e-3, "ERROR: The matrix must have zero trace, but here (1/M)Tr[g/sqrt(M)] ="+str(trace)
-    weight_diagonal = np.sum(np.diag(np.abs(g)))/np.sum(g**2)
-    print("Theoretical diagonal weight / actual diagonal weight in L2 norm:", 1./M, "/", weight_diagonal) 
-
 class Denoising_TAP:
     def __init__(self, parameters_):
         self.parameters = parameters_
@@ -29,12 +10,10 @@ class Denoising_TAP:
         assert self.S_type in ["wigner", "wishart"], "ERROR: Unknown matrix type for S"
         self.verbosity = parameters_['verbosity']
         self.Delta = parameters_["Delta"]
-        self.rescaled = (self.Delta > 1) #Do we consider instead rescaled variables, e.g.\ rescaled = Y / sqrt(Delta)
+        self.rescaled = (self.Delta > 1) #For Delta > 1 we rescale the observations and consider instead Y' = Y / sqrt(Delta)
         if self.S_type == "wishart":
             self.alpha = parameters_["alpha"]
             self.N = int(self.M / self.alpha)
-        elif self.S_type == "uniform":
-            self.Lmax = parameters_["Lmax"] #Uniform distribution in [-Lmax,Lmax]
         elif self.S_type == "orthogonal":
             self.sigma = parameters_["sigma"] #Scaling of the orthogonal matrix: we have Y/sqrt(M) = sigma O + sqrt(Delta) Z / sqrt(M)
         
@@ -75,13 +54,6 @@ class Denoising_TAP:
     def get_solution(self):
         return {'rescaled':self.rescaled, 'parameters':self.parameters, 'Sstar':self.Sstar, 'Y':self.Y, 'g':self.g, 'r':self.r, 'omega':self.omega, 'b':self.b}
 
-    def check_nishimori(self):
-        #Returns ||g||^2 * (1+Delta) / M^2, which should be close to 1 if Nishimori is satisfied
-        if not(self.rescaled):
-            return np.mean(self.g**2)*(1 + self.Delta)
-        else: #Rescaled
-            return np.mean(self.g**2)*(1. / self.Delta + 1)
-
     def save(self):
         #Saving the current state
         output = {'rescaled':self.rescaled, 'N':self.N, 'M':self.M, 'parameters':self.parameters, 'Xstar':self.Xstar, 'Y':self.Y, 'g':self.g, 'r':self.r, 'omega':self.omega, 'b':self.b}
@@ -107,8 +79,6 @@ class Denoising_TAP:
             if self.order >= 3:
                 spec_g += (np.sqrt(self.alpha)/(self.Delta)**(3./2))*(1. + 1./self.Delta - self.spec_Y**2)/((1./self.Delta + 1)**3)
         self.g = np.sqrt(self.M) * self.evec_Y @ np.diag(spec_g) @ np.transpose(self.evec_Y)
-        if self.verbosity >= 2:
-            check_diagonal_removal(self.M, self.g)
         np.fill_diagonal(self.g, 0)
         self.compute_other_variables()
        
@@ -121,7 +91,7 @@ class Denoising_TAP:
             np.fill_diagonal(self.omega,0.)
             self.r = 1./(self.Delta + self.b)
             np.fill_diagonal(self.r,0.)
-        else: #Then we use rescaled = Y / sqrt(Delta) and all rescaled variables, in particular self.v = self.variance
+        else: #Then we use rescaled = Y / sqrt(Delta) and all rescaled variables
             self.omega = self.Y - (1 + 1./self.Delta)*self.g #omega' = omega/sqrt(Delta)
             np.fill_diagonal(self.omega,0.)
             self.b = np.ones((self.M,self.M)) / self.Delta #b' = b/Delta
@@ -130,7 +100,7 @@ class Denoising_TAP:
             np.fill_diagonal(self.r,0.)
 
     def get_free_entropy(self):
-        phi = 0
+        phi = 0.
         if self.S_type == "wishart":
             #The linear terms in the Lagrange multipliers 
             phi += (self.M/(2.*self.N))*(- np.mean(self.omega*self.g) - np.mean(self.b*(-self.r + self.g**2)/2.)) #Careful, we symmetrized so there is a factor 2 here

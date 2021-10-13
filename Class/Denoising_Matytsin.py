@@ -1,18 +1,7 @@
-"""
-We compute the y_MMSE (and sometimes the free energy as well) for the denoising problem using Matytsin's integral.
-This assumes a Gaussian channel with variance Delta.
-"""
-
-from inspect import Parameter
-import numpy as np
-from numpy.lib import scimath #The square root here can take negative numbers
-from scipy import integrate
 import time
-from numpy.polynomial import Polynomial
+import numpy as np
+from scipy import integrate
 from .functions import g_Y
-
-#The function g_Y gives me the Stieltjes transform of the shifted version of Y, i.e. of Y - sqrt[n] Id_m 
-#But the MMSE is invariant to shifting the spectrum of Y, so it does not matter, I can use it.
 
 class Denoising_Matytsin():
 
@@ -20,13 +9,11 @@ class Denoising_Matytsin():
         self.parameters = parameters_
         self.Deltas = np.sort(Deltas_) 
         self.S_type = parameters_['S_type']
-        assert self.S_type in ["wigner", "wishart", "uniform", "orthogonal"], "ERROR: Unknown matrix type for S"
+        assert self.S_type in ["wigner", "wishart", "orthogonal"], "ERROR: Unknown matrix type for S"
         if self.S_type == "wishart":
             self.alpha = parameters_["alpha"]
             if self.alpha > 1:
                 self.epsilon_regularization = parameters_['epsilon_regularization']
-        elif self.S_type == "uniform":
-            self.Lmax = parameters_["Lmax"] #Uniform distribution in [-Lmax,Lmax]
         elif self.S_type == "orthogonal":
             self.sigma = parameters_["sigma"] #Scaling of the orthogonal matrix: Y = sqrt(M) sigma O + sqrt(Delta) Z
 
@@ -254,7 +241,7 @@ class Denoising_Matytsin():
             return {'Deltas':self.Deltas, 'y_MMSEs':y_MMSEs}
 
     def find_rho_v(self, t, more_precise = False):
-        rescaled = (t > 1)
+        rescaled = (t > 1) #For Delta > 1 we rescale the observations and consider instead Y' = Y / sqrt(Delta)
         NB_POINTS_x = self.NB_POINTS_x_default
         if more_precise:
             NB_POINTS_x = self.NB_POINTS_x
@@ -293,19 +280,6 @@ class Denoising_Matytsin():
                 zs = np.sort(zs)
                 zs = np.unique(zs) #Sorted and unique elements
                 regular_grid = False
-            
-        elif self.S_type == "uniform":
-            min_estimate, max_estimate = -self.Lmax - 2.*np.sqrt(t), self.Lmax + 2.*np.sqrt(t)
-            if rescaled:
-                min_estimate /= np.sqrt(t)
-                max_estimate /= np.sqrt(t)
-            #To avoid some issues
-            min_estimate -= 0.01 
-            max_estimate += 0.01 
-
-            #Now we compute the full gs
-            zs, step = np.linspace(min_estimate, max_estimate, num = NB_POINTS_x, retstep=True)
-            regular_grid = True
         
         elif self.S_type == "orthogonal":
             min_estimate, max_estimate = -self.sigma - 2.*np.sqrt(t), self.sigma + 2.*np.sqrt(t)

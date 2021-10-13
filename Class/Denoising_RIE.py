@@ -1,27 +1,19 @@
-"""
-The L2 Rotationally Invariant Estimator
-Since we have a Gaussian additive noise, it is quite simple to build
-"""
-
 import numpy as np
-from scipy import linalg, optimize
-from numpy.polynomial import Polynomial
+from scipy import linalg
 from .functions import g_Y, random_orthogonal
 
 class Denoising_RIE():
 
     def __init__(self, Delta_, parameters_):
         self.Delta = Delta_
-        self.rescaled = (self.Delta > 1)
+        self.rescaled = (self.Delta > 1) #For Delta > 1 we rescale the observations and consider instead Y' = Y / sqrt(Delta)
         self.parameters = parameters_
         self.S_type = parameters_['S_type']
         self.M = parameters_['M']
-        assert self.S_type in ["wigner", "wishart", "uniform", "orthogonal"], "ERROR: Unknown matrix type for S"
+        assert self.S_type in ["wigner", "wishart", "orthogonal"], "ERROR: Unknown matrix type for S"
         if self.S_type == "wishart":
             self.alpha = parameters_["alpha"]
             self.N = int(self.M / self.alpha)
-        elif self.S_type == "uniform":
-            self.Lmax = parameters_["Lmax"] #Uniform distribution in [-Lmax,Lmax]
         elif self.S_type == "orthogonal":
             self.sigma = parameters_["sigma"] #Scaling of the orthogonal matrix: we have Y/sqrt(M) = sigma O + sqrt(Delta) Z / sqrt(M)
         self.epsilon_imag = parameters_['epsilon_imag'] #Small imaginary part used in the calculations 
@@ -40,12 +32,6 @@ class Denoising_RIE():
         elif self.S_type == "wigner":
             self.Hstar = rng.normal(0, 1, (self.M, self.M))
             self.Hstar = (self.Hstar + np.transpose(self.Hstar)) / np.sqrt(2.)
-        elif self.S_type == "uniform":
-            #Generate the diagonal 
-            diag = rng.uniform(-self.Lmax, self.Lmax, self.M)
-            #Generate a random rotation matrix
-            U = random_orthogonal(self.M, rng)
-            self.Hstar = np.sqrt(self.M) * U @ np.multiply(diag, np.transpose(U))
         elif self.S_type == "orthogonal":
             #We generate a random *symmetric* orthogonal matrix
             diag = 2*rng.integers(0, 1, size = self.M, endpoint=True) - 1 #Random vector of +- 1
