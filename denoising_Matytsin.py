@@ -1,12 +1,13 @@
-import numpy as np
 import pickle, sys
+import numpy as np
 from Class.Denoising_Matytsin import Denoising_Matytsin
+
+#Remove the uniform spectrum
 
 """
 In order to always have (1/m) Tr[S^2] -> 1, with S the shifted zero-trace version, we need:
  - Variance 1 for Wishart (usual), S = XX^T / sqrt(NM) (shifted)
- - Wigner: Variance 1
- - Uniform: Lmax = np.sqrt(3)
+ - Wigner: Variance 1.
  - Orthogonal: sigma = 1
 """
 
